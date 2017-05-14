@@ -47,8 +47,8 @@
 \author{Michal Vácha} %author's name without academic degrees
 \authorWithDegrees{Michal Vácha} %author's name with academic degrees
 \supervisor{Ing. Petr Máj}
-\acknowledgements{I would like to thank my supervisor Ing. Petr Máj for being supportive and patient with me and my thesis. Special thanks goes to other members of PRL-PRG laborarory, namely Filip Křikava and Filippo Ghibellini both helped me many times when I was struggeling with difficulties in R. Finally, I would like to thank my family and friends for their support throughout my whole studies. }
-\abstractEN{This thesis is a stepping stone towards a greater endeavor: making R faster without breaking compatibility with existing packages. To do that, a tool for test generation called Genthat has been developed. Genthat creates tests from traces of function calls and to do that is has to be able to serialize arbitrary object a function may take as an argument or return as a result. Although R is a functional language and therefore the usage of closures is abundant, they have not been supported in Genthat. In my work, I have implemented the serialization of closures and improved other areas, namely serialization of language expressions and improving the code clarity of generated tests.}
+\acknowledgements{I would like to thank my supervisor Ing. Petr Máj for being supportive and patient with me and my thesis. Special thanks go to other members of PRL-PRG laboratory, namely Filip Křikava and Filippo Ghibellini, who helped me many times when I was struggling with difficulties in R. Finally, I would like to thank my family and friends for their support throughout my whole studies. }
+\abstractEN{This thesis is a stepping stone towards a greater endeavor: making R faster without breaking compatibility with existing packages. To do that, a tool for automatic test generation called Genthat has been developed. It captures traces of function calls and then generates test cases from them. To do that is has to be able to serialize arbitrary object a function may take as an argument or return as a result. Although R is a functional language and therefore the usage of closures is abundant, they have not been supported by Genthat. In my work, I have implemented the serialization of closures and improved other areas, namely serialization of language expressions and the code clarity of generated tests.}
 
 \abstractCS{Tato bakalářská práce je součástí větší snahy, a to udělat R rychlejší bez rozbití zpětné kompatibility. K tomu byl vytvořen nástroj pro automatické generování testů, Genthat. Jeho cílem je trasovat volání funkcí a z těchto záznamů následně vytvořit sadu testů. Aby to bylo možné, je nutné, aby Genthat uměl serializovat libovolný objekt, který může funkce v R přijímat jako parametr nebo vracet. R je funkcionální jazyk, a proto se v něm často používají funkce typu closure, které zachytávají kontext, kde byly vytvořeny. Tyto funkce nebyly dříve v Genthatu podporovány a mým úkolem bylo přidat jejich podporu. Mimo to jsem vylepšil i ostatní části, konkrétně serializaci výrazů a čitelnost výsledných testů.}
 
@@ -68,14 +68,14 @@
 \chapter{Introduction}
 
 
-R is an open source language used in many different fields for statistical analysis. R’s main advantage over competing products is its vast repository of existing packages. On the other hand, the main disadvantage of R is its slowness compared to native code as \cite{vitek} states: ``In the Shootout benchmark R is on average 501 slower than C and 43 times slower Python. Benchmarks where R performs better, like Shootout’s regex-dna (only 1.6 slower than C), are usually cases where R delegates most of its work to C functions.'' Because R is an interpreted language, there have been many attempts to write a faster interpreter for it.
+R is an open source language used in many different fields for statistical analysis. R’s main advantage over competing products is its vast repository of existing packages. On the other hand, the main disadvantage of R is its slowness as \cite{vitek} states: ``In the Shootout benchmark R is on average 501 slower than C and 43 times slower Python. Benchmarks where R performs better, like Shootout’s regex-dna (only 1.6 slower than C), are usually cases where R delegates most of its work to C functions.'' Because R is an interpreted language, there have been many attempts to write a faster interpreter for it.
 
-The alternative implementations of R like FastR\footnote{\url{https://github.com/graalvm/fastr}} or Renjin\footnote{\url{https://github.com/bedatadriven/renjin}} are indeed faster\cite{renjin}, but what is always missing is the backwards compatibility with all the existing R code \footnote{Renjin has it's own package repository at \url{http://packages.renjin.org} and it is just a subset of CRAN repository, with many packages having their tests failing.}. 
+The alternative implementations of R like FastR\footnote{\url{https://github.com/graalvm/fastr}} or Renjin\footnote{\url{https://github.com/bedatadriven/renjin}} are indeed faster \cite{renjin}, but what is always missing is the backwards compatibility with all the existing R code\footnote{Renjin has it's own package repository at \url{http://packages.renjin.org} and it is just a subset of CRAN repository, with many packages having their tests failing.}. 
 
-The problem with R is that it does not have a specification \footnote{As of writing this thesis there is only a draft of the specification available} that would be compulsory for all the implementations to abide by. The official implementation of R, the CRAN-R is often called a referential implementation and if full language specification was ever made, it would describe the behavior of CRAN-R. We can compare this situation with JavaScript, which is also a dynamic interpreted language, but has a formal specification called ECMAScript\cite{EcmaScript}. Even though every browser has its own implementation of JS interpreter, works with any existing JS code, that is compliant with the ECMAScript specs. In the JavaScript world, this has enabled competition who would became the fastest between browser vendors. 
+The problem with R is that it does not have a specification\footnote{As of writing this thesis there is only a draft of the specification available} that would be compulsory for all the implementations to abide by. The official implementation of R, the CRAN-R is often called a referential implementation and if full language specification was ever made, it would describe the behavior of CRAN-R. We can compare this situation with JavaScript, which is also a dynamic interpreted language, but has a formal specification called ECMAScript\cite{EcmaScript}. Even though every browser has its own implementation of JS interpreter, works with any existing JS code, that is compliant with the ECMAScript specs. In the JavaScript world, this has enabled competition who would became the fastest between browser vendors. 
 
 \section{Genthat as a way towards an alternative R implementation}
-The main purpose of Genthat is to generate as many test cases for existing R code as possible, so these tests could be used to verify whether the alternative implementations of R (like FastR) are going to work correctly with existing R codebases and most importantly work with existing packages from CRAN repository\footnote{\url{https://cran.r-project.org/}}. \cite{testRPoster} So instead of having specification to test against, we will get large set of unit tests that would check whether existing code behaves as it does in the referential implementation (CRAN-R).
+The main purpose of Genthat is to generate as many test cases for existing R code as possible, so these tests could be used to verify whether the alternative implementations of R (like FastR) are going to work correctly with existing R codebases and most importantly work with existing packages from CRAN repository\footnote{\url{https://cran.r-project.org/}}\cite{testRPoster}. So instead of having specification to test against, we will get large set of unit tests that would check whether existing code behaves as it does in the referential implementation (CRAN-R).
 
 \section{Motivational example}
 Right now tracing of function like \verb|lapply2|\cite{advR} which just applies a function to a list or vector of values, does not work, because Genthat cannot serialize closures.
@@ -123,7 +123,7 @@ This thesis includes many short code examples, typically in R. They may be just 
 lapply(numbers, function(x) x %% n)
 \end{minted}
 
-Or they may be written in a form of a snippet from execution of the \emph{R repl} (Read-eval-print loop is a shell used for interactive programming which takes user input line by line, executes it and returns the result. The repl snippets are recognizable by \verb|<| in front of the lines, that represent user input. Lines that are not prefixed by \verb|<| represent output from the last executed statement.
+Or they may be written in a form of a snippet from execution of the \emph{R repl} (Read-eval-print loop is a shell used for interactive programming which takes user input line by line, executes it and returns the result. The repl snippets are recognizable by \verb|>| in front of the lines, that represent user input. Lines that are not prefixed by \verb|>| represent output from the last executed statement.
 
 \begin{minted}{r}
 > exp <- function(e) pryr::sexp_type(e)
@@ -142,30 +142,28 @@ This chapter describes all the features of R required to understand the content 
 \section{Objects}
 ``R does not provide direct access to the computer’s memory but rather provides a number of specialized data structures we will refer to as objects. These objects are referred to through symbols or variables.'' \cite{specs}
 
-This section provides description of the data types in R that are relevant for this thesis. The description for the omitted types can be found in the R Specification.
-
-The first column shows the data type as returned by the R’s typeof function, second column is SEXP type - structure that R uses to represent the object internally and how it is seen when accessing R objects from C.
+All the relevant data types for this thesis can be found in table \ref{tab:types}. The first column shows the data type as returned by the R’s \verb|typeof| function, second column is SEXP type - structure that R uses to represent the object internally and how it is seen when accessing R objects from C.
 
 \begin{table}
 	\caption[Data types in R]{Data types in R}\label{tab:types}
 	\begin{tabularx}{1\textwidth}{|l|l|X|}\hline
 		Type		& SEXP type		& Description \tabularnewline \hline \hline
 		NULL		& \verb|NILSXP|		& Null value  \tabularnewline \hline
-		Symbol	& \verb|SYMSXP|	& Name of a variable or an arbitrary symbol in a language expression  \tabularnewline \hline
-		Pairlist	& \verb|LISTSXP|	& Structure containing arguments in function declaration \tabularnewline \hline
+		Symbol	& \verb|SYMSXP|	& Name of a variable or an arbitrary symbol in a language expression.  \tabularnewline \hline
+		Pairlist	& \verb|LISTSXP|	& Structure containing arguments in function declaration. \tabularnewline \hline
 		Closure	& \verb|CLOSXP|	& Closure  \tabularnewline \hline
 		Environment	& \verb|ENVSXP|	& Environment  \tabularnewline \hline
-		Promise	& \verb|PROMSXP|	& Language expression with an environment in which it should evaluate \tabularnewline \hline
+		Promise	& \verb|PROMSXP|	& Language expression with an environment in which it should evaluate. \tabularnewline \hline
 		Language	& \verb|LANGSXP|	& Language expression  \tabularnewline \hline
-		Special	& \verb|SPECIALSXP|	& Internal function that does not force evaluation of its arguments \tabularnewline \hline
-		Builtin	& \verb|BUILTINSXP|	& Internal function that does force evaluation of its arguments \tabularnewline \hline
-		Logical	& \verb|LGLSXP|	& A vector of Boolean values \tabularnewline \hline
-		Integer	& \verb|INTSXP|	& A vector of integers  \tabularnewline \hline
-		Double	& \verb|DBLSXP|	& A vector of real numbers (doubles)  \tabularnewline \hline
-		Character & \verb|STRSXP| & A vector of characters, also referred to as a string \tabularnewline \hline
-		List	& \verb|VECSXP|	& A list (also called recursive vectors)  \tabularnewline \hline
-		Expression	& \verb|EXPRSXP|	& A vector of language expressions  \tabularnewline \hline
-		\ldots	& \verb|DOTSXP|	& Triple dots representing arbitrary number of arguments in function declaration  \tabularnewline \hline		
+		Special	& \verb|SPECIALSXP|	& Internal function that does not force evaluation of its arguments. \tabularnewline \hline
+		Builtin	& \verb|BUILTINSXP|	& Internal function that does force evaluation of its arguments. \tabularnewline \hline
+		Logical	& \verb|LGLSXP|	& A vector of Boolean values. \tabularnewline \hline
+		Integer	& \verb|INTSXP|	& A vector of integers.  \tabularnewline \hline
+		Double	& \verb|DBLSXP|	& A vector of real numbers (doubles).  \tabularnewline \hline
+		Character & \verb|STRSXP| & A vector of characters, also referred to as a string. \tabularnewline \hline
+		List	& \verb|VECSXP|	& A list (also called recursive vectors).  \tabularnewline \hline
+		Expression	& \verb|EXPRSXP|	& A vector of language expressions.  \tabularnewline \hline
+		\ldots	& \verb|DOTSXP|	& Triple dots representing arbitrary number of arguments in function. declaration  \tabularnewline \hline		
 	\end{tabularx}
 \end{table}
 
@@ -242,21 +240,21 @@ Variable \verb|x| contains the result of an expression \verb|y + 2|. This expres
 y + 2
 \end{minted}
 
-Encapsulating the expression in a \verb|quote| function call, which preserves the expression and does not evaluate it. We can now say that \verb|x| contains a quoted expression of \verb|y+2| to emphasize that the expression is not evaluated. 
+Encapsulating the expression in a \verb|quote| function call, preserves the expression and does not evaluate it. We can now say that \verb|x| contains a quoted expression of \verb|y+2| to emphasize that the expression is not evaluated. 
 
 Having the expression itself and not just the result enables us to perform computation on the language itself (also called meta programming), as we are able to modify the expression during runtime of our program or evaluate it in arbitrary environment.
 
 \subsection{Function objects}
 In R, you can work with functions as with any other objects, they can be assigned to variable or passed and returned from other functions. A function in R has three basic parts: formals, body and environment. 
 
-Formals is a list of argument names and their default value. Ellipsis (\ldots) used as an argument name has special semantics and can accept arbitrary number of arguments. 
+Formals is a list of argument names and their default value. Ellipsis (\ldots) used as an argument name have a special semantics as they represent ability to accept arbitrary number of arguments. 
 
 Environment is a reference to the environment where the function should look for values of symbols that are not arguments or local variables. It is also called an enclosing environment or a captured environment. Function with a captured scope (environment) is a closure, so in R every function except for special and builtin functions is a closure.
 
-R enables you to read and modify all three parts of a function.
+In it is R possible to read and modify all three parts of a function.
 
 \subsubsection{Builtin and special objects}
-Both types represent built-in functions in R, which are core functions of R implemented in C and they do not have any body, formals or environment associated with them, because they do not contain any R code. The difference between builtins and specials is how they evaluate their arguments. Special functions do not force evaluation of their arguments, builtins do.
+Both types represent built-in functions in R, which are core functions of R implemented in C. They do not have any body, formals or environment associated with them, because they do not contain any R code. The difference between \verb|builtin| and \verb|special| is how they evaluate their arguments. Special functions do not force evaluation of their arguments, builtins do.
 
 For example the already mentioned \verb|quote| function is a special object, because it needs to work with the unevaluated expressions. 
 
@@ -265,7 +263,7 @@ For example the already mentioned \verb|quote| function is a special object, bec
 [1] "special" 
 \end{minted}
 
-The example for builtin function can be a plus operator, that requires its arguments to be evaluated, because we want to compute the addition of two numbers and not the symbols that may be bound to them.
+The example for builtin function can be a plus operator, that requires its arguments to be evaluated, because we want to compute the addition of two numbers and not the symbols that may be contain the values.
 
 \begin{minted}{r}
 > typeof(`+`)
@@ -279,11 +277,11 @@ a + b
 \end{minted}
 
 \subsection{Promises}
-Promise is a special object, that encapsulates an R expression, which gets lazily evaluated. That means it is not evaluated when assigned to a variable, but when the variable it is assigned to gets read for the first time and then the result is cached. All the subsequent calls to the variable just return the cached result. The act of evaluating a promise for the first time is called forced evaluation. 
+Promise is a special object, that encapsulates an R expression, which gets lazily evaluated. That means it is not evaluated when assigned to a variable, but when the variable gets read for the first time, the expression gets evaluates and then the result is cached. All the subsequent calls to the variable just return the cached result. The act of evaluating a promise for the first time is called forced evaluation. 
 
 Because the contexts when promise is created and when it is called for the first time may differ, there is also an environment associated with it. The environment tells the promise object in which environment it should evaluate the encapsulated expression.
 
-When a function is called the arguments are matched and then each of the formal arguments is bound to a promise (for functions supporting arbitrary number of arguments also all of the unmatched names are bound to the promises). The expression that was given for the specific argument and a reference to the environment the function was called from are stored in the promise. \cite{specs} The reason behind this behavior is that now a function can decide whether it will work with the value or the expression passed to it. To extract the expression of the promise R has the function substitute, which returns a language expression. Working with arguments by using their expressions and not values is called a non standard evaluation.
+When a function is called its arguments are matched and then each of the formal arguments is bound to a promise (for functions supporting arbitrary number of arguments also all of the unmatched names are bound to the promises). The expression that was given for the specific argument and a reference to the environment the function was called from are stored in the promise \cite{specs}. The reason behind this behavior is that now a function can decide whether it will work with the value or the expression passed to it. To extract the expression of the promise R has the function \verb|substitute|, which returns a language expression. Working with arguments by using their expressions and not values is called a non standard evaluation \cite{advR}.
 
 There is one more way to create a promise except when passing argument to a function and that is by calling function \verb|delayedAssign| instead of using assign or assignment operator \verb|<-| when binding variable and its value/expression.
 
@@ -301,7 +299,7 @@ Error in f(10, notFound) : object 'notFound' not found
 Understanding of environments is a precursor to understanding all the more advanced topics in R and it is essential to grasp their meaning in order to reason about computing on the language itself and tracing the function calls that Genthat is all about.
 
 \subsection{Structure of an environment}
-As mentioned previously environment is where the promises get evaluated and where R finds stuff. Environment is a data structure that enables scoping in R. It comprises of a symbol-value pairs and a reference to the parent environment. Sometimes the symbol-value pairs are also called the environment’s frame. When R looks up a symbol value in an environment it first checks the symbol-value pairs and if it is not found there, it recursively continues the search to the parent environment until the symbol is found or the empty environment is reached. Empty environment represents the end of environments hierarchy and has no parent.
+As mentioned previously environment is where the promises get evaluated and where R finds stuff. Environment is a data structure that enables scoping in R. It is comprised of a symbol-value pairs and a reference to the parent environment. Sometimes the symbol-value pairs are also called the environment’s frame. When R looks up a symbol value in an environment it first checks the symbol-value pairs and if it is not found there, it recursively continues the search to the parent environment until the symbol is found or the empty environment is reached. Empty environment represents the end of environments hierarchy and has no parent.
 
 \subsection{Parent environment}
 Every environment contains a reference to a parent environment (also called an enclosing environment). In the following scenario \verb|e1| is the parent of \verb|e2| (visualized with the dashed arrow).
@@ -407,7 +405,7 @@ Dynamic scoping means looking up variables in the calling environment instead of
 \section{Closures}
 Although every function that has an environment associated with it is a closure, the name closure is often used just for functions returned from another function (and therefore enclosing the execution environment of the parent function) \cite{advR}. It is not considered good practice to reference variables from the global environment \cite{advR}, on the other hand capturing the execution environment of parent function can be beneficial as it enables us to create factory functions and to manage the mutable state.
 
-\subsection{Factory functions}
+\subsection{Factory functions} \label{ssec:clos1}
 Factory functions are functions, that create a function based on the arguments passed to it. They are useful when regular function would require many arguments, that would be the same across different calls or when they use some of the arguments for initialization, that needs to be done only once and can be expensive in terms of I/O access or CPU time. Following example is intentionally simplistic only to describe this pattern and does not represent best practice when it should be used.
 
 Mod adder is a factory function for creating add functions in modular arithmetic. It returns a new function that takes two operands \verb|(a, b)| and adds them in the specified module mod.
@@ -436,8 +434,8 @@ The captured execution environments contain the mod argument passed to the origi
 mod :  num 5
 \end{minted}
 
-\subsection{Managing the mutable state}
-In R functions can mutate variables in their enclosing environment by calling the scoping assignment operator \verb|<<-|. When mutating variables in the enclosing scope (e.g. the global environment) there is a risk that another function may mutate the variable we are using to store the function’s state and thus inadvertently affecting the execution of our function. Closures solves this by encapsulating the state in the captured execution environment of the calling function. Following example shows a simple modular counter.
+\subsection{Managing the mutable state} 
+In R functions can modify (mutate) variables in their enclosing environment by calling the scoping assignment operator \verb|<<-|. When mutating variables in the enclosing scope (e.g. the global environment) there is a risk that another function may mutate the variable we are using to store the function’s state and thus inadvertently affecting the execution of our function. Closures solves this by encapsulating the state in the captured execution environment of the parent function. Following example shows a simple modular counter.
 
 \begin{minted}{r}
 > mod_ctr <- function(mod) {i = 0; function() {i <<- (i + 1) %% mod; i}}
@@ -466,15 +464,15 @@ The other possible use of Genthat except for generating tests for verifying alte
 First step in order to generate tests is to decorate the functions we want to generate the tests for. This is done using the \verb|decorate_functions| call. Functions can be decorated individually or in bulk when using the package argument to decorate all the functions inside a package
 
 \begin{enumerate}
-\item decorate a single function
+\item Decorate a single function.
 \begin{minted}{r}
 >decorate_functions("fn1")
 \end{minted}
-\item decorate all the functions a package exports
+\item Decorate all the functions a package exports.
 \begin{minted}{r}
 >decorate_functions(package = "somePackage")
 \end{minted}
-\item decorate all the functions in a package including non-exported ones
+\item Decorate all the functions in a package including non-exported ones.
 \begin{minted}{r}
 >decorate_functions(package = "somePackage", include_hidden = TRUE)
 \end{minted}
@@ -495,7 +493,7 @@ Genthat went with custom serialization written in C++, that serializes R objects
 There are two different methods to serialize R objects: \verb|serialize_r| and \verb|serialize_r_expr|. The second method is used for serializing language expression objects in R that are in a context where they do not have to be enclosed in quote function, typically arguments of a function call. \verb|Serialize_r| is used in all other cases and it only calls \verb|serialize_r_expr| when it needs to serialize a nested language expression or an item in a pairlist. \\ \verb|Serialize_r_expr| is also simpler, because some types cannot exist inside a language expression (e.g. complex numbers) and all the vectors have length\,1.
 
 \subsection{Test generation}
-After the trace has been serialized, it is prepared in a form from tests can be made easily. Function \verb|get_tests| generates tests into an output directory. It creates one file per test case and one test case per trace. 
+After the trace has been serialized, it is in a form from which tests can be made easily. Function \verb|get_tests| generates tests into an output directory. It creates one file per test case and one test case per trace. 
 
 \begin{minted}{r}
 gen_tests(output_dir = "./genthat_tests")
@@ -503,6 +501,15 @@ gen_tests(output_dir = "./genthat_tests")
 
 The generated tests use package testthat, that uses syntax that is accessible and understandable even for novice users. Each test is wrapped in a \verb|test_that| function and for assertion functions with clear names like \verb|expect_identical| or \verb|expect_equal| are used.
 
+For example for function call \verb|add13(5L, 10L)| of function \verb|add13| from the chapter \ref{ssec:clos1} Genthat would generate the following test:
+
+\begin{minted}{r}
+test_that("add13", {
+    expected <- 2L
+
+    expect_equal(add13(5L, 10L), expected)
+})
+\end{minted}
 
 \chapter{Serializing arguments as expressions}
 This chapter describes work of my colleague Filippo Ghibellini on serializing arguments as expressions and because I have built all my work on top of it, it is essential to briefly describe it.
@@ -514,7 +521,7 @@ x <- 10
 f(x)
 \end{minted}
 
-Genthat would serialize this as \verb|f(10)|. Which from the function’s point of view is the same, if the function is referentially transparent. Referentially transparent function behaves the same if we replace its arguments by their values. \verb|f(10)| must be the same \verb|f(x)|. But referential transparency does not hold for functions that use non-standard evaluation. Example may be the hist function. The following call takes 1000 samples from normal distribution and prints its histogram.
+Genthat would serialize this as \verb|f(10)|. Which from the function’s point of view is the same, if the function is referentially transparent. Referentially transparent function behaves the same if we replace its arguments by their values. \verb|f(10)| must be the same \verb|f(x)|. But referential transparency does not hold for functions that use non-standard evaluation. Example may be the \verb|hist| function. The following call takes 1000 samples from normal distribution and prints its histogram.
 
 \begin{minted}{r}
 x <- rnorm(1000)
@@ -529,7 +536,7 @@ As shown above R used both the value and the expression \verb|x| to print this c
 
 This is caused by \verb|hist| being referentially opaque (opposite of referentially transparent) and although the values are the same, the expressions that created them differ and \verb|hist| accesses both the value and expression for the first argument and it prints different labels for different expressions.
 
-For correct serialization of functions like this, Filippo devised, that Genthat would be tracing both the expressions passed as argument and all the values for variables in that expression.
+For correct serialization of functions like this, Filippo devised, that Genthat would be tracing both the expressions passed as argument and all the values of variables contained in those expressions.
 
 \subsection{Capturing arguments in decorated functions}
 When function is decorated, its code gets instrumented and genthat’s code is inserted before its original body and into the \verb|on.exit| handler.
@@ -729,7 +736,7 @@ Function calls are represented by call nodes. They start with pair of parenthesi
 \end{minted}
 
 \subsection{Argument names}
-As shown in the previous repl output, the argument name \verb|a| is missing from the ast printout. Internally argument names are attached to the argument value using the \verb|TAG| pointer.\cite{specs} 
+As shown in the previous repl output, the argument name \verb|a| is missing from the ast printout. Internally argument names are attached to the argument value using the \verb|TAG| pointer \cite{specs}.
 
 \begin{minted}{r}
 > .Internal(inspect(quote(f(a=1, b))))

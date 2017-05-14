@@ -114,7 +114,7 @@ test_that("lapply2", {
 
 
 \section{Thesis organization}
- First chapter description of all the nuances of the language which are relevant in the context of Genthat and this thesis. The most important parts are about evaluation of expressions in R and how it searches for variables in the search path. The following chapter is a brief overview of how the Genthat package works. Chapter three describes the work of my colleague which I have extensively build upon and the following chapters describe the problems I have solved as a practical part of my bachelor’s thesis. 
+ Chapter \ref{chap:R} contains description of all the nuances of the language which are relevant in the context of Genthat and this thesis. The most important parts are about evaluation of expressions in R and how it searches for variables in the search path. The following chapter \ref{chap:genthat} is a brief overview of how the Genthat package works. Chapter \ref{chap:args} describes the work of my colleague which I have extensively build upon and the following chapters \ref{chap:expr} and \ref{chap:clos} describe the problems I have solved as a practical part of my bachelor’s thesis. 
 
 \section{Code samples in this thesis}
 This thesis includes many short code examples, typically in R. They may be just pieces of R code without output:
@@ -136,7 +136,7 @@ First two lines are inputs and the third is an output. It is a vector containing
 
 \setsecnumdepth{all}
 
-\chapter{Introduction to R}
+\chapter{Introduction to R} \label{chap:R}
 This chapter describes all the features of R required to understand the content of this bachelor’s thesis. It also describes some of the advanced concepts of R that are useful to understand in order to be able to think in R from a perspective of a programmer and not just a user.
 
 \section{Objects}
@@ -362,7 +362,7 @@ The following example \ref{fig:hierarchy} shows the environment hierarchy after 
 
 \begin{figure}\centering
     \includegraphics[width=\textwidth]{img/hierarchy.png}
-	\caption[]{Example hierarchy of environments in R}\label{fig:hierarchy}
+	\caption[Example hierarchy of environments in R]{Example hierarchy of environments in R}\label{fig:hierarchy}
 \end{figure}
 
 \subsection{Execution environment}
@@ -455,7 +455,7 @@ In R functions can modify (mutate) variables in their enclosing environment by c
 
 The example shows, that the state of the both counters is isolated and cannot be inadvertently mutated by another function call.
 
-\chapter{Genthat}
+\chapter{Genthat} \label{chap:genthat}
 \section{How R community may use Genthat}
 The other possible use of Genthat except for generating tests for verifying alternative R implementation is helping package creators with the adoption of unit testing inside their packages. Many packages in the CRAN repository usually have a sample of their usage in files called vignettes. These vignettes are in the RMarkdown format and contain code snippets describing how to use the package. We could use the snippets to generate tests for the package and then the author could include them with the other unit tests for the package to make sure he has not broken any of the package’s main functionalities before he submits an updated version to the repository. The generated tests could also be used during package development to find bugs faster 
 
@@ -511,7 +511,7 @@ test_that("add13", {
 })
 \end{minted}
 
-\chapter{Serializing arguments as expressions}
+\chapter{Serializing arguments as expressions} \label{chap:args}
 This chapter describes work of my colleague Filippo Ghibellini on serializing arguments as expressions and because I have built all my work on top of it, it is essential to briefly describe it.
 
 Genthat originally serialized only the forced values of arguments. For function call with one variable in it:
@@ -571,7 +571,7 @@ names(elem_vals) <- exprs
 The variables \verb|call_args| and \verb|elem_vals| are then used to create the trace of the function call. Later when \verb|generate_tests| function is called, the trace is used to create the test case for the function.
 
 \subsection{Test generation}
-For simple example of test generation using the improvements mentioned in this chapter we are going to use a modified version of function \verb|add13| from the chapter four. The modified version prints the expressions a and b passed to it, followed by the result.
+For simple example of test generation using the improvements mentioned in this chapter we are going to use a modified version of function \verb|add13| from the chapter \ref{ssec:clos1}. The modified version prints the expressions a and b passed to it, followed by the result.
 
 \begin{minted}{r}
 add13p <- function(a, b){
@@ -611,7 +611,7 @@ test_that("add13", {
 
 As shown above, Genthat is now able to capture calls of functions which use non standard evaluation, capture both the expressions for arguments and the values for all variables referenced in them.  The resulting test generated is as close as possible to the original function call and is easily readable. 
 
-\chapter{Serialization of language expressions}
+\chapter{Serialization of language expressions} \label{chap:expr}
 \section{Previous state}
 Genthat already supported serialization of simple language expressions, but before we went from forcing the function arguments to not forcing them they were not the main focus, because they would only be used in two scenarios:  first when quoted language expression and second when formula was passed to the function. 
 
@@ -628,7 +628,7 @@ Genthat already supported serialization of simple language expressions, but befo
 
 But when we started to handle all arguments as expressions, the scope of usage has broadened and some improvements had to be done so we would be able to serialize as many language expressions as possible.
 
-\section{Structure of language expression in R}
+\section{Structure of language expression in R} \label{sec:ast}
 ``Internal representation of language expression in R is an AST (abstract syntax tree) and we can use the ast() function from pryr package to print the structure of a language expression.'' \cite{advR}
 
 \begin{minipage}{\linewidth}
@@ -813,7 +813,7 @@ Coefficients:
 
 We cannot generally say whether \verb|lm| (or any other function) would look for the symbols in the calling environment, or it would look for them somewhere else, or not look for them at all. This is a combination of passing arguments as promises and nonstandard evaluation in R. And because any function can use these and there is no simple way to determine that, we cannot require recording of value of every symbol found inside the language expression, but we can only try to record them when they are found and when we do not find them, we assume that the function is not going to look them up in the calling environment and Genthat no longer raises an error when this happens. 
 
-\subsection{Serialization of function declaration}
+\subsection{Serialization of function declaration} \label{ssub:clos2}
 Serialization of function declaration is used when a lambda function is passed into the decorated function or when quoted language expression contains function declaration.
 
 Passing of a lambda function:
@@ -851,7 +851,7 @@ As shown above, the function declaration is internally represented as any other 
 function(pairlist(a, b), a+b)
 \end{minted}
 
-But this is not a way a function can be constructed in R, so I have improved it so it would be serialized back to the same form as is the entered expression. It required adding a conditional branch for handling functions, so its second argument is not inside the brackets, but behind them and fixing the serialization of nested pairlist. The result for the mentioned AST is this:
+But this is not a way a function can be constructed in R, I had to improved it so it would be serialized back to the same form as is the entered expression. It required adding a conditional branch for handling functions, so its second argument is not inside the brackets, but behind them and fixing the serialization of nested pairlist. The result for the mentioned AST is this:
 
 \begin{minted}{r}
 "function(a, b) a+b"
@@ -970,7 +970,7 @@ And it is identical to the language expression in exp:
 
 \subsection{Serialization of nested logical and string values}
 
-As mentioned before in the section about node types in language expression, the constant nodes contain atomic vector of length one. This makes their serialization easier than serializing arbitrary atomic vectors.
+As mentioned before in the chapter \ref{sec:ast} about node types in language expression, the constant nodes contain atomic vector of length one. This makes their serialization easier than serializing arbitrary atomic vectors.
 
 There has already been support for serializing integers and real numbers, but two types of constant nodes were missing from Genthat: logical and string. For both the implementation was fairly simple, we take the first item of the atomic vector,then if it is NA value, we return the right format of NA for either logical or string and return the corresponding string representation.
 
@@ -985,8 +985,7 @@ case STRSXP: {
 }
 \end{minted}
 
-The code sample above shows that R uses integers for internal representation of logical values and for strings we call internal Genthat’s function \verb|to_string_literal|, that handles escaping of special characters.
-
+The code above is a part of \verb|serialize_r| function in C++ and it shows that R uses integers for internal representation of logical values. For strings it calls Genthat’s internal function \verb|to_string_literal|, that handles escaping of special characters.
 
 \subsection{Serialization of named arguments in function calls}
 Previously Genthat did not read the \verb|TAG| property of the symbols inside function calls and supported only positional arguments. Serialization of a function call with named arguments used to be treated as a call with just positional arguments and that led to generating broken tests.
@@ -1026,8 +1025,8 @@ test_that("fx", {
 })
 \end{minted}
 
-\chapter{Serialization of Closures}
-Closures has been already mentioned many times, it has been shown what closures are made of, how they are created, their related environments and the last chapter describer how anonymous closures are serialized. Closures are serialized differently whether they are anonymous or bound to a name (named closures). 
+\chapter{Serialization of Closures} \label{chap:clos}
+Closures has been already mentioned many times, it has been shown what closures are made of, how they are created, their related environments and the chapter \ref{ssub:clos2} described how anonymous closures are serialized. Closures are serialized differently whether they are anonymous or bound to a name (named closures). 
 
 \begin{minted}{r}
 #Named closure
@@ -1061,7 +1060,7 @@ Typically, anonymous functions are used only when the computation expressed by t
 Another reason behind the distinction of how anonymous functions and named functions are serialized is to try two ways and see which would perform better on the packages from CRAN and then decide which way the closure serialization should follow.
 
 \section{Passing closures into higher order functions}
-As mentioned in the chapter about the internals of genthat when decorated function is called, we do not force the evaluation of its arguments and we trace the value of expressions passed into it separately from the expressions themselves. This causes that anonymous functions and named functions are not the same from the tracing perspective. 
+As mentioned in the chapter \ref{chap:genthat} about the internals of genthat when decorated function is called, we do not force the evaluation of its arguments and we trace the value of expressions passed into it separately from the expressions themselves. This causes that anonymous functions and named functions are not the same from the tracing perspective. 
 
 When an anonymous function is passed and evaluation is not forced, Genthat gets the language expression (\verb|LANGSXP|) of the whole function declaration, but for a named function it gets only the name of the function as a symbol (\verb|SYMSXP|). When serializing the expression, it must work with the already forced value of the function declaration (\verb|CLOSEXP|). The example below demonstrates that:
 
@@ -1155,7 +1154,7 @@ Closure is now recreated and when test case calls \verb|fx|, everything should e
 \subsubsection{Example}
 Now when we can combine few of the previous examples and show how test generation works for them after all the improvements have been implemented. 
 
-We are going to use the \verb|lapply2| function from the introduction and the \verb|mod_adder| from the chapter about closures.
+We are going to use the \verb|lapply2| function from the introduction and the \verb|mod_adder| from the chapter \ref{ssec:clos1} about closures.
 
 \begin{minted}{r}
 lapply2 <- function(x, f, ...) {

@@ -51,7 +51,7 @@
 \acknowledgements{I would like to thank my supervisor Ing. Petr Máj for being supportive and patient with me and my thesis. Special thanks go to other members of PRL-PRG laboratory, namely Filip Křikava and Filippo Ghibellini, who helped me many times when I was struggling with difficulties in R. Finally, I would like to thank my family and friends for their support throughout my whole studies. }
 \abstractEN{This thesis is a step towards a greater endeavor: making R code more reliable and maintainable. To do that, a tool for automatic test generation called Genthat has been developed. It captures traces of function calls and then generates test cases from them. To do that is has to be able to serialize arbitrary object a function may take as an argument or return as a result. Although R is a functional language and therefore the usage of closures is abundant, they have not been supported by Genthat. In my work, I have implemented the serialization of closures and improved other areas, namely serialization of language expressions and the code clarity of generated tests.}
 
-\abstractCS{Tato bakalářská práce je součástí větší snahy, a to udělat kód napsaný v R spolehlivější a lépe udržovatelný. K tomu byl vytvořen nástroj pro automatické generování testů, Genthat. Jeho cílem je trasovat volání funkcí a z těchto záznamů následně vytvořit sadu testů. Aby to bylo možné, je nutné, aby Genthat uměl serializovat libovolný objekt, který může funkce v R přijímat jako parametr nebo vracet. R je funkcionální jazyk, a proto se v něm často používají first-order funkce (closures), které zachytávají kontext, kde byly vytvořeny. Tyto funkce nebyly dříve v Genthatu podporovány a mým úkolem bylo přidat jejich podporu. Mimo to jsem vylepšil i ostatní části, konkrétně serializaci výrazů a čitelnost výsledných testů.}
+\abstractCS{Tato bakalářská práce je součástí větší snahy, a to udělat kód napsaný v R spolehlivější a lépe udržovatelný. K tomu byl vytvořen nástroj pro automatické generování testů, Genthat. Jeho cílem je trasovat volání funkcí a z těchto záznamů následně vytvořit sadu testů. Aby to bylo možné, je nutné, aby Genthat uměl serializovat libovolný objekt, který může funkce v R přijímat jako parametr nebo vracet. R je funkcionální jazyk, a proto se v něm často používají closures. To jsou funkce, které zachytávají kontext, kde byly vytvořeny. Tyto funkce nebyly dříve v Genthatu podporovány a mým úkolem bylo přidat jejich podporu. Mimo to jsem vylepšil i ostatní části, konkrétně serializaci výrazů a čitelnost výsledných testů.}
 
 \placeForDeclarationOfAuthenticity{Prague}
 \keywordsCS{R, generování testů, funkcionální programování, serializace dat, Genthat }
@@ -68,7 +68,7 @@
 \setsecnumdepth{part}
 \chapter{Introduction}
 
-R is currently the most popular programming language in the field of data science and statistics \cite{ieeeTop}. As these fields are gaining momentum, so is R \cite{soTrends}. In the beginning, it has been used mostly by researchers\footnote{The precursor of R language, the S language has been developed at Bell Laboratories \cite{langS}}, but nowadays it is becoming a central part of business intelligence pipelines even at large companies like Facebook or Microsoft\cite{usingR} and the demand for reliable and maintainable R code is ever increasing. 
+R is currently the most popular programming language in the field of data science and statistics \cite{ieeeTop}. As these fields are gaining momentum, so is R \cite{soTrends}. In the beginning, it has been used mostly by researchers\footnote{The precursor of R language, the S language has been developed at Bell Laboratories \cite{langS}}, but nowadays it is becoming a central part of business intelligence pipelines even at large companies like Facebook or Microsoft\cite{usingR} and the demand for reliable and maintainable R code is ever increasing.
 
 Genthat is an open source project\footnote{\url{https://github.com/prl-prg/genthat}} which aims to address these demands by creating tests from observed function calls such as when function f(a, b) is called with arguments 1 and 2, the following test is produced:
 
@@ -82,7 +82,7 @@ test_that("lapply2", {
 To do so, Genthat must know how to serialize the argument values so that they can appear in the tests. Prior to my thesis, Genthat was not able to serialize functions and therefore functions taking other functions as arguments, which is a common pattern in R and functional languages in general.
 
 \section{Goal}
-The goal is to be able to trace any call to a common function like \verb|lapply2|\cite{advR}, which accepts a function and applies it to a list.
+The goal is to be able to trace any call to a common function like \verb|lapply2|\cite{advR}, which accepts a function and applies it to a list. It is not as easy to do as it may seem, because functions in R have a scope (environment) they enclose, their bodies have to be serialized from their ASTs and they may call other closures found in their search paths.
 
 \begin{minted}{r}
 lapply2 <- function(x, f, ...) {
@@ -463,7 +463,7 @@ In R functions can modify (mutate) variables in their enclosing environment by c
 The example shows, that the state of the both counters is isolated and cannot be inadvertently mutated by another function call.
 
 \chapter{Genthat} \label{chap:genthat}
-\section{How R community may use Genthat}
+\section{Genthat’s usecase}
 Genthat may help package creators with the adoption of unit testing inside their packages. Many packages in the CRAN repository usually have a sample of their usage in files called vignettes. These vignettes are in the RMarkdown format and contain code snippets describing how to use the package. We could use the snippets to generate tests for the package and then the author may include them with the other unit tests for the package to make sure he has not broken any of the package’s main functionalities before he submits an updated version to the repository.
 
 \section{How Genthat works}

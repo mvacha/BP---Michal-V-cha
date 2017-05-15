@@ -18,6 +18,7 @@
 \usepackage[T1]{fontenc} 
 \usepackage{lmodern}
 \usepackage{minted}
+\usepackage{float}
 
 \usepackage{graphicx} %graphics files inclusion
 %\usepackage{amsmath}
@@ -48,12 +49,12 @@
 \authorWithDegrees{Michal Vácha} %author's name with academic degrees
 \supervisor{Ing. Petr Máj}
 \acknowledgements{I would like to thank my supervisor Ing. Petr Máj for being supportive and patient with me and my thesis. Special thanks go to other members of PRL-PRG laboratory, namely Filip Křikava and Filippo Ghibellini, who helped me many times when I was struggling with difficulties in R. Finally, I would like to thank my family and friends for their support throughout my whole studies. }
-\abstractEN{This thesis is a stepping stone towards a greater endeavor: making R faster without breaking compatibility with existing packages. To do that, a tool for automatic test generation called Genthat has been developed. It captures traces of function calls and then generates test cases from them. To do that is has to be able to serialize arbitrary object a function may take as an argument or return as a result. Although R is a functional language and therefore the usage of closures is abundant, they have not been supported by Genthat. In my work, I have implemented the serialization of closures and improved other areas, namely serialization of language expressions and the code clarity of generated tests.}
+\abstractEN{This thesis is a step towards a greater endeavor: making R code more reliable and maintainable. To do that, a tool for automatic test generation called Genthat has been developed. It captures traces of function calls and then generates test cases from them. To do that is has to be able to serialize arbitrary object a function may take as an argument or return as a result. Although R is a functional language and therefore the usage of closures is abundant, they have not been supported by Genthat. In my work, I have implemented the serialization of closures and improved other areas, namely serialization of language expressions and the code clarity of generated tests.}
 
-\abstractCS{Tato bakalářská práce je součástí větší snahy, a to udělat R rychlejší bez rozbití zpětné kompatibility. K tomu byl vytvořen nástroj pro automatické generování testů, Genthat. Jeho cílem je trasovat volání funkcí a z těchto záznamů následně vytvořit sadu testů. Aby to bylo možné, je nutné, aby Genthat uměl serializovat libovolný objekt, který může funkce v R přijímat jako parametr nebo vracet. R je funkcionální jazyk, a proto se v něm často používají funkce typu closure, které zachytávají kontext, kde byly vytvořeny. Tyto funkce nebyly dříve v Genthatu podporovány a mým úkolem bylo přidat jejich podporu. Mimo to jsem vylepšil i ostatní části, konkrétně serializaci výrazů a čitelnost výsledných testů.}
+\abstractCS{Tato bakalářská práce je součástí větší snahy, a to udělat kód napsaný v R spolehlivější a lépe udržovatelný. K tomu byl vytvořen nástroj pro automatické generování testů, Genthat. Jeho cílem je trasovat volání funkcí a z těchto záznamů následně vytvořit sadu testů. Aby to bylo možné, je nutné, aby Genthat uměl serializovat libovolný objekt, který může funkce v R přijímat jako parametr nebo vracet. R je funkcionální jazyk, a proto se v něm často používají first-order funkce (closures), které zachytávají kontext, kde byly vytvořeny. Tyto funkce nebyly dříve v Genthatu podporovány a mým úkolem bylo přidat jejich podporu. Mimo to jsem vylepšil i ostatní části, konkrétně serializaci výrazů a čitelnost výsledných testů.}
 
 \placeForDeclarationOfAuthenticity{Prague}
-\keywordsCS{R, generování testů, funkcionální programování, serializace dat,     Genthat }
+\keywordsCS{R, generování testů, funkcionální programování, serializace dat, Genthat }
 \keywordsEN{R, test generation, functional programming, data serialization, Genthat}
 \declarationOfAuthenticityOption{1} %select as appropriate, according to the desired license (integer 1-6)
 % \website{http://site.example/thesis} %optional thesis URL
@@ -67,18 +68,21 @@
 \setsecnumdepth{part}
 \chapter{Introduction}
 
+R is currently the most popular programming language in the field of data science and statistics \cite{ieeeTop}. As these fields are gaining momentum, so is R \cite{soTrends}. In the beginning, it has been used mostly by researchers\footnote{The precursor of R language, the S language has been developed at Bell Laboratories \cite{langS}}, but nowadays it is becoming a central part of business intelligence pipelines even at large companies like Facebook or Microsoft\cite{usingR} and the demand for reliable and maintainable R code is ever increasing. 
 
-R is an open source language used in many different fields for statistical analysis. R’s main advantage over competing products is its vast repository of existing packages. On the other hand, the main disadvantage of R is its slowness as \cite{vitek} states: ``In the Shootout benchmark R is on average 501 slower than C and 43 times slower Python. Benchmarks where R performs better, like Shootout’s regex-dna (only 1.6 slower than C), are usually cases where R delegates most of its work to C functions.'' Because R is an interpreted language, there have been many attempts to write a faster interpreter for it.
+Genthat is an open source project\footnote{\url{https://github.com/prl-prg/genthat}} which aims to address these demands by creating tests from observed function calls such as when function f(a, b) is called with arguments 1 and 2, the following test is produced:
 
-The alternative implementations of R like FastR\footnote{\url{https://github.com/graalvm/fastr}} or Renjin\footnote{\url{https://github.com/bedatadriven/renjin}} are indeed faster \cite{renjin}, but what is always missing is the backwards compatibility with all the existing R code\footnote{Renjin has it's own package repository at \url{http://packages.renjin.org} and it is just a subset of CRAN repository, with many packages having their tests failing.}. 
+\begin{minted}{r}
+test_that("lapply2", {
+    expected <- 3L
+    expect_equal(f(1L, 2L), expected)
+})
+\end{minted}
 
-The problem with R is that it does not have a specification\footnote{As of writing this thesis there is only a draft of the specification available} that would be compulsory for all the implementations to abide by. The official implementation of R, the CRAN-R is often called a referential implementation and if full language specification was ever made, it would describe the behavior of CRAN-R. We can compare this situation with JavaScript, which is also a dynamic interpreted language, but has a formal specification called ECMAScript\cite{EcmaScript}. Even though every browser has its own implementation of JS interpreter, works with any existing JS code, that is compliant with the ECMAScript specs. In the JavaScript world, this has enabled competition who would became the fastest between browser vendors. 
+To do so, Genthat must know how to serialize the argument values so that they can appear in the tests. Prior to my thesis, Genthat was not able to serialize functions and therefore functions taking other functions as arguments, which is a common pattern in R and functional languages in general.
 
-\section{Genthat as a way towards an alternative R implementation}
-The main purpose of Genthat is to generate as many test cases for existing R code as possible, so these tests could be used to verify whether the alternative implementations of R (like FastR) are going to work correctly with existing R codebases and most importantly work with existing packages from CRAN repository\footnote{\url{https://cran.r-project.org/}}\cite{testRPoster}. So instead of having specification to test against, we will get large set of unit tests that would check whether existing code behaves as it does in the referential implementation (CRAN-R).
-
-\section{Motivational example}
-Right now tracing of function like \verb|lapply2|\cite{advR} which just applies a function to a list or vector of values, does not work, because Genthat cannot serialize closures.
+\section{Goal}
+The goal is to be able to trace any call to a common function like \verb|lapply2|\cite{advR}, which accepts a function and applies it to a list.
 
 \begin{minted}{r}
 lapply2 <- function(x, f, ...) {
@@ -88,11 +92,6 @@ lapply2 <- function(x, f, ...) {
   }
   out
 }
-\end{minted}
-
-The goal is to be able to trace any call to such function, for example:
-
-\begin{minted}{r}
 values <- list(10L, 20L, 13L, 15L, 18L)
 mod <- 13L
 lapply2(values, function(x) (x + 5) %% mod)
@@ -112,18 +111,17 @@ test_that("lapply2", {
 \end{minted}
 
 
-
 \section{Thesis organization}
- Chapter \ref{chap:R} contains description of all the nuances of the language which are relevant in the context of Genthat and this thesis. The most important parts are about evaluation of expressions in R and how it searches for variables in the search path. The following chapter \ref{chap:genthat} is a brief overview of how the Genthat package works. Chapter \ref{chap:args} describes the work of my colleague which I have extensively build upon and the following chapters \ref{chap:expr} and \ref{chap:clos} describe the problems I have solved as a practical part of my bachelor’s thesis. 
+ Chapter \ref{chap:R} describes all the nuances of the R language which are relevant in the context of Genthat and this thesis. The most important parts are about evaluation of expressions in R and how it searches for variables in the search path. The following chapter \ref{chap:genthat} is a brief overview of how the Genthat package works. Chapter \ref{chap:args} describes the work of my colleague which I have build upon and the following chapters \ref{chap:expr} and \ref{chap:clos} describe the problems I have solved as a practical part of my bachelor’s thesis. 
 
-\section{Code samples in this thesis}
+\section{Code samples}
 This thesis includes many short code examples, typically in R. They may be just pieces of R code without output:
 
 \begin{minted}{r}
 lapply(numbers, function(x) x %% n)
 \end{minted}
 
-Or they may be written in a form of a snippet from execution of the \emph{R repl} (Read-eval-print loop is a shell used for interactive programming which takes user input line by line, executes it and returns the result. The repl snippets are recognizable by \verb|>| in front of the lines, that represent user input. Lines that are not prefixed by \verb|>| represent output from the last executed statement.
+Or they may be written in a form of a snippet from execution of the R repl (Read-eval-print loop is a shell used for interactive programming which takes user input line by line, executes it and returns the result. The repl snippets are recognizable by \verb|>| in front of the lines, that represent user input. Lines that are not prefixed by \verb|>| represent output from the last executed statement.
 
 \begin{minted}{r}
 > exp <- function(e) pryr::sexp_type(e)
@@ -134,15 +132,24 @@ Or they may be written in a form of a snippet from execution of the \emph{R repl
 
 First two lines are inputs and the third is an output. It is a vector containing one element \verb|"CLOSXP"|. Because R indexes items from one, the index in the brackets is one. Pryr package\cite{pryr} is often used for printing R structures of properties.
 
+\section{Genthat as a way towards an alternative R implementation}
+R’s main advantage over competing products is its vast repository of existing packages. On the other hand, the main disadvantage of R is its slowness as \cite{vitek} states: ``In the Shootout benchmark R is on average 501 slower than C and 43 times slower Python. Benchmarks where R performs better, like Shootout’s regex-dna (only 1.6 slower than C), are usually cases where R delegates most of its work to C functions.'' There have been many attempts to write a faster interpreter for R.
+
+While the alternative implementations of R like FastR\footnote{\url{https://github.com/graalvm/fastr}} or Renjin\footnote{\url{https://github.com/bedatadriven/renjin}} are indeed faster \cite{renjin}, but they lack the backwards compatibility with all the existing R code\footnote{Renjin has it's own package repository at \url{http://packages.renjin.org} and it is just a subset of CRAN repository, with many packages having their tests failing.}. 
+
+The problem with R is that it does not have a specification\footnote{As of writing this thesis there is only a draft of the specification available} that would be compulsory for all the implementations to abide by. The official implementation of R, the CRAN-R is often called a referential implementation and if full language specification was ever made, it would describe the behavior of CRAN-R. We can compare this situation with JavaScript, which is also a dynamic interpreted language, but has a formal specification called ECMAScript\cite{EcmaScript}. Even though every browser has its own implementation of JS interpreter, works with any existing JS code, that is compliant with the ECMAScript specs. In the JavaScript world, this has enabled competition who would became the fastest between browser vendors. 
+
+Genthat may be used to generate as many test cases for existing R code as possible, so these tests could be used to verify whether the alternative implementations of R (like FastR) are going to work correctly with existing R codebases and most importantly work with existing packages from CRAN repository\footnote{\url{https://cran.r-project.org/}}\cite{testRPoster}.
+
 \setsecnumdepth{all}
 
 \chapter{Introduction to R} \label{chap:R}
 This chapter describes all the features of R required to understand the content of this bachelor’s thesis. It also describes some of the advanced concepts of R that are useful to understand in order to be able to think in R from a perspective of a programmer and not just a user.
 
 \section{Objects}
-``R does not provide direct access to the computer’s memory but rather provides a number of specialized data structures we will refer to as objects. These objects are referred to through symbols or variables.'' \cite{specs}
+Working with data in R is done using objects, they are specialized data structures, that abstract the user from working directly with the computer's memory. Objects can be used via symbols or variables they are bound to \cite{specs}.
 
-All the relevant data types for this thesis can be found in table \ref{tab:types}. The first column shows the data type as returned by the R’s \verb|typeof| function, second column is SEXP type - structure that R uses to represent the object internally and how it is seen when accessing R objects from C.
+All the relevant data types for this thesis can be found in table \ref{tab:types}. The first column of the table shows the data type as returned by the R’s \verb|typeof| function, second column is SEXP type - structure that R uses to represent the object internally and how it is seen when accessing R objects from C.
 
 \begin{table}
 	\caption[Data types in R]{Data types in R}\label{tab:types}
@@ -168,11 +175,11 @@ All the relevant data types for this thesis can be found in table \ref{tab:types
 \end{table}
 
 \subsection{Vectors}
-Vectors represent basic data types in R, they are also called atomic vectors, because they can contain only items of basic (atomic) types: logical, integer, double, character, complex and raw\footnote{Complex and raw types differ from the rest as they cannot exist inside an unevaluated language expression. They are only mentioned for completeness and are otherwise unimportant for this thesis.}. All items inside a vector must be of the same type, hence vectors are referred to as monomorphic or homogenous data types. Every item of a vector can be referred via its index and we can easily iterate over a vector’s items.
+Vectors represent basic data types in R, they are also called atomic vectors, because they can contain only items of basic (atomic) types: logical, integer, double, character, complex and raw\footnote{Complex and raw types differ from the rest as they cannot exist inside an unevaluated language expression. They are only mentioned for completeness and are otherwise unimportant for this thesis.}. All items inside a vector must be of the same type, hence vectors are referred to as monomorphic or homogenous data types \cite{advR}. Every item of a vector can be referred via its index and we can easily iterate over a vector’s items.
 
 R does not have any “scalar” types. Single values are represented by vectors of length one.
 
-To create a vector, we use the \verb|c| function as shown in the example. \verb|C| means concatenate and we can think about the \verb|c| calls as a concatenation of objects passed into in. In the following examples, they are all length 1 vectors.
+To create a vector, we use the \verb|c| function as shown in the example. \verb|c| means concatenate and we can think about the \verb|c| calls as a concatenation of objects passed into in. In the following examples, they are all length 1 vectors.
 
 \begin{minted}{r}
 > c(1, 2, 3, 4)
@@ -186,7 +193,7 @@ We can use \verb|typeof| function to see the data type.
 [1] "double"
 \end{minted}
 
-It may be surprising that R returned double and not integer. This is because the implicit type of numbers in R is double (it is usually an integer in most programming languages) and to get a vector of integers, we have to suffix the values with \verb|L|.
+It may be surprising that R returned double and not integer. This is because the implicit type of numbers in R is double\footnote{(It is usually an integer in most programming languages.)} and to get a vector of integers, we have to suffix the values with \verb|L|.
 
 \begin{minted}{r}
 > typeof(c(1L, 2L, 3L, 4L))
@@ -204,7 +211,7 @@ Another aspect of vectors is type coercion. That means that when values of disti
 We can easily coerce logical values to integers, integer to doubles and doubles to strings. That means if any of the value passed to \verb|c| is a string (and the rest logical, int and doubles), we get a vector of strings.
 
 \subsection{Lists}
-``Lists have elements, each of which can be of any R type, i.e. the elements of a list do not have to be of the same type.'' \cite{specs} That means lists are heterogenous (also called polymorphic) data structures. The lists can be used to store data types, which cannot be stored in vectors, like functions or other lists. Lists are also called recursive vectors, because they can contain other lists. To create a list, we use the \verb|list| function.
+Lists are made of items, each of which can be of different R type. That means lists are heterogenous (also called polymorphic) data structures\cite{advR}. Lists can be used to store data types, which cannot be stored in vectors, like functions or other lists. Lists are also called recursive vectors, because they can contain other lists. To create a list, we use the \verb|list| function.
 
 \begin{minted}{r}
 > list(1, list(2, "3"))
@@ -222,7 +229,7 @@ We can easily coerce logical values to integers, integer to doubles and doubles 
 \subsection{Language expressions}
 Language objects represent unevaluated parsed R code. Their form is an AST (abstract syntax tree) which is made of four different node types: calls, names, constants and pairlists. Although R has a special type called expression (that behaves like a list of language objects), when the word expression is used, it refers to the language expression (This follows convention from \cite{advR}).
 
-Language objects enable us work with the expression itself (the parsed R code) and not just its result. The distinction should be obvious from this example:
+Language objects enable us work with the expressions themselves (the parsed R code) and not just its result. The distinction should be obvious from this example:
 
 \begin{minted}{r}
 > y <- 1
@@ -240,12 +247,12 @@ Variable \verb|x| contains the result of an expression \verb|y + 2|. This expres
 y + 2
 \end{minted}
 
-Encapsulating the expression in a \verb|quote| function call, preserves the expression and does not evaluate it. We can now say that \verb|x| contains a quoted expression of \verb|y+2| to emphasize that the expression is not evaluated. 
+Encapsulating the expression in a \verb|quote| function call, preserves the expression and does not evaluate it. We can now say that \verb|x| contains a quoted expression\cite{advR} of \verb|y+2| to emphasize that the expression is not evaluated. 
 
-Having the expression itself and not just the result enables us to perform computation on the language itself (also called meta programming), as we are able to modify the expression during runtime of our program or evaluate it in arbitrary environment.
+Having the expression itself and not just the result enables us to perform computation on the language itself (also called metaprogramming), as we are able to modify the expression during runtime of our program or evaluate it in arbitrary environment.
 
 \subsection{Function objects}
-In R, you can work with functions as with any other objects, they can be assigned to variable or passed and returned from other functions. A function in R has three basic parts: formals, body and environment. 
+In R, you can work with functions as with any other objects, they can be assigned to variables or passed and returned from other functions. A function in R has three basic parts: formals, body and environment. 
 
 Formals is a list of argument names and their default value. Ellipsis (\ldots) used as an argument name have a special semantics as they represent ability to accept arbitrary number of arguments. 
 
@@ -253,7 +260,7 @@ Environment is a reference to the environment where the function should look for
 
 In it is R possible to read and modify all three parts of a function.
 
-\subsubsection{Builtin and special objects}
+\subsubsection{Builtin and special functions}
 Both types represent built-in functions in R, which are core functions of R implemented in C. They do not have any body, formals or environment associated with them, because they do not contain any R code. The difference between \verb|builtin| and \verb|special| is how they evaluate their arguments. Special functions do not force evaluation of their arguments, builtins do.
 
 For example the already mentioned \verb|quote| function is a special object, because it needs to work with the unevaluated expressions. 
@@ -263,7 +270,7 @@ For example the already mentioned \verb|quote| function is a special object, bec
 [1] "special" 
 \end{minted}
 
-The example for builtin function can be a plus operator, that requires its arguments to be evaluated, because we want to compute the addition of two numbers and not the symbols that may be contain the values.
+The example of builtin function can be a plus operator, that requires its arguments to be evaluated, because we want to compute the addition of two numbers and not the symbols that may be contain the values.
 
 \begin{minted}{r}
 > typeof(`+`)
@@ -277,7 +284,7 @@ a + b
 \end{minted}
 
 \subsection{Promises}
-Promise is a special object, that encapsulates an R expression, which gets lazily evaluated. That means it is not evaluated when assigned to a variable, but when the variable gets read for the first time, the expression gets evaluates and then the result is cached. All the subsequent calls to the variable just return the cached result. The act of evaluating a promise for the first time is called forced evaluation. 
+Promise is a special object, that encapsulates an R expression, which gets lazily evaluated. That means it is not evaluated when assigned to a variable, but when the variable gets read for the first time, the expression gets evaluates and then the result is cached. All the subsequent reads of the variable just return the cached result. The act of evaluating a promise for the first time is called forced evaluation \cite{specs}. 
 
 Because the contexts when promise is created and when it is called for the first time may differ, there is also an environment associated with it. The environment tells the promise object in which environment it should evaluate the encapsulated expression.
 
@@ -296,7 +303,7 @@ Error in f(10, notFound) : object 'notFound' not found
 \end{minted}
 
 \section{Environments}
-Understanding of environments is a precursor to understanding all the more advanced topics in R and it is essential to grasp their meaning in order to reason about computing on the language itself and tracing the function calls that Genthat is all about.
+Understanding of environments is a precursor to understanding the more advanced topics in R and it is essential to grasp their meaning in order to reason about computing on the language itself and tracing the function calls that Genthat is all about.
 
 \subsection{Structure of an environment}
 As mentioned previously environment is where the promises get evaluated and where R finds stuff. Environment is a data structure that enables scoping in R. It is comprised of a symbol-value pairs and a reference to the parent environment. Sometimes the symbol-value pairs are also called the environment’s frame. When R looks up a symbol value in an environment it first checks the symbol-value pairs and if it is not found there, it recursively continues the search to the parent environment until the symbol is found or the empty environment is reached. Empty environment represents the end of environments hierarchy and has no parent.
@@ -308,7 +315,7 @@ Every environment contains a reference to a parent environment (also called an e
 \includegraphics[width=0.75\textwidth]{img/parent-env.png}
 
 
-When we try to evaluate the symbol \verb|x| in \verb|e2| we receive the value 20 from the parent environment. But it doesn’t work the opposite way – \verb|e1| does not know about \verb|e2|’s existence and therefore we cannot get the value of \verb|y| from it. The hierarchy of environments where we look for the symbol is also called the search path.
+When we try to evaluate the symbol \verb|x| in \verb|e2| we receive the value 20 from the parent environment. But it doesn’t work the opposite way – \verb|e1| does not know about \verb|e2|’s existence and therefore we cannot get the value of \verb|y| from it. The hierarchy of environments where we look for the symbol is also called the search path \cite{specs}.
 
 \begin{minted}{r}
 > eval(quote(x), e1)
@@ -322,7 +329,7 @@ Error in eval(expr, envir, enclos) : object 'y' not found
 \end{minted}
 
 \subsection{Environment hierarchy}
-The previous example was really simplistic, when R repl starts up or an R script is run, the execution begins in the global environment (named .GlobalEnv), that already has a hierarchy of parent environments. They can be printed by calling the \verb|search| function.
+The previous example was really simplistic, when R repl starts up or an R script is executed, the execution begins in the global environment (named \verb|.GlobalEnv|), that already has a hierarchy of parent environments. They can be printed by calling the \verb|search| function.
 
 \begin{minted}{r}
 > search() # prints current search path
@@ -356,7 +363,7 @@ It has been already mentioned that every function has an environment it encloses
 
 \subsection{Package environments}
 
-Values can have more than one binding environment and R uses that for functions that are exported (made public) from packages. All the exported functions are bound in the \verb|package:packageName| environment. There are another two environments that R creates for each \verb|package:namespace| environment and imports environment. Namespace environment binds all the functions of the package (not just the exported ones) and its parent is the import environment for the package. The import environment binds all the exported symbols from the dependent packages.
+Values can have more than one binding environment and R uses that for functions that are exported (made public) from packages. All the exported functions are bound in the \verb|package:packageName| environment. There are another two environments that R creates for each package:  \verb|package:namespace| environment and \verb|imports| environment. Namespace environment binds all the functions of the package (not just the exported ones) and its parent is the import environment for the package. The import environment binds all the exported symbols from the dependent packages.
 
 The following example \ref{fig:hierarchy} shows the environment hierarchy after the Genthat package has been loaded. Genthat depends on the \texttt{codetools} package\cite{codetools}, so its exported functions are also bounded in its imports environment, but the enclosing environment of \texttt{findGlobals} is still the same – it’s the \texttt{namespace:coodetool} environment. The last unmentioned environment is \texttt{namespace:base}. \texttt{Namespace:base} contains binds for allexported functions in the \texttt{package:base} and its parent environment is \texttt{.GlobalEnv} and all the imports environment encloses it.
 
@@ -366,7 +373,7 @@ The following example \ref{fig:hierarchy} shows the environment hierarchy after 
 \end{figure}
 
 \subsection{Execution environment}
-When a function is called a new environment is created for its run. At first all the arguments are copied to it in a form of promises and its parent environment is set to the enclosing environment of the function. Every local variable the function declared also goes to its execution environment. After the function is finished, the execution environment goes away unless there is a closure that captures is and escapes (e.g. by being returned from the function). 
+When a function is called a new environment is created for its run. At first all the arguments are copied to it in a form of promises and its parent environment is set to the enclosing environment of the function. Every local variable the function declares also goes to its execution environment. After the function is finished, the execution environment goes away unless there is a closure that captures is and escapes (e.g. by being returned from the function). 
 
 \subsection{Calling environment}
 R also has a special term for the environment from which the function was called: the calling environment. The most important thing about this environment is that arguments (passed in the form of promises) are evaluated in this environment. They are bound in the newly created execution environment of the called function, but evaluated in the calling environment.
@@ -416,7 +423,7 @@ Mod adder is a factory function for creating add functions in modular arithmetic
 > add13 <- mod_adder(13)
 \end{minted}
 
-The bodied of both closures \verb|add5| and \verb|add13| are the same, but their environments differ.
+The bodies of both closures \verb|add5| and \verb|add13| are the same, but their environments differ.
 
 \begin{minted}{r}
 > add5
@@ -435,7 +442,7 @@ mod :  num 5
 \end{minted}
 
 \subsection{Managing the mutable state} 
-In R functions can modify (mutate) variables in their enclosing environment by calling the scoping assignment operator \verb|<<-|. When mutating variables in the enclosing scope (e.g. the global environment) there is a risk that another function may mutate the variable we are using to store the function’s state and thus inadvertently affecting the execution of our function. Closures solves this by encapsulating the state in the captured execution environment of the parent function. Following example shows a simple modular counter.
+In R functions can modify (mutate) variables in their enclosing environment by calling the scoping assignment operator \verb|<<-|. When mutating variables in the enclosing scope (e.g. the global environment) there is a risk that another function may mutate the variable we are using to store the function’s state and thus inadvertently affect the execution of our function. Closures solve this by encapsulating the state in the captured execution environment of the parent function. Following example shows a simple modular counter.
 
 \begin{minted}{r}
 > mod_ctr <- function(mod) {i = 0; function() {i <<- (i + 1) %% mod; i}}
@@ -457,7 +464,7 @@ The example shows, that the state of the both counters is isolated and cannot be
 
 \chapter{Genthat} \label{chap:genthat}
 \section{How R community may use Genthat}
-The other possible use of Genthat except for generating tests for verifying alternative R implementation is helping package creators with the adoption of unit testing inside their packages. Many packages in the CRAN repository usually have a sample of their usage in files called vignettes. These vignettes are in the RMarkdown format and contain code snippets describing how to use the package. We could use the snippets to generate tests for the package and then the author could include them with the other unit tests for the package to make sure he has not broken any of the package’s main functionalities before he submits an updated version to the repository. The generated tests could also be used during package development to find bugs faster 
+Genthat may help package creators with the adoption of unit testing inside their packages. Many packages in the CRAN repository usually have a sample of their usage in files called vignettes. These vignettes are in the RMarkdown format and contain code snippets describing how to use the package. We could use the snippets to generate tests for the package and then the author may include them with the other unit tests for the package to make sure he has not broken any of the package’s main functionalities before he submits an updated version to the repository.
 
 \section{How Genthat works}
 \subsection{Function decoration (instrumentation)}
@@ -490,7 +497,7 @@ There are few ways how to serialize objects in R. The first is by calling the \v
 
 Genthat went with custom serialization written in C++, that serializes R objects into the R code. It is not typical, but it satisfies the condition of serializing arbitrary R object, making human readable output and generating tests that would be easily editable.
 
-There are two different methods to serialize R objects: \verb|serialize_r| and \verb|serialize_r_expr|. The second method is used for serializing language expression objects in R that are in a context where they do not have to be enclosed in quote function, typically arguments of a function call. \verb|Serialize_r| is used in all other cases and it only calls \verb|serialize_r_expr| when it needs to serialize a nested language expression or an item in a pairlist. \\ \verb|Serialize_r_expr| is also simpler, because some types cannot exist inside a language expression (e.g. complex numbers) and all the vectors have length\,1.
+There are two different methods to serialize R objects: \verb|serialize_r| and \verb|serialize_r_expr|. The second method is used for serializing language expression objects in R that are in a context where they do not have to be enclosed in quote function, typically arguments of a function call. \verb|Serialize_r| is used in all other cases and it only calls \verb|serialize_r_expr| when it needs to serialize a nested language expression or an item in a pairlist. \\ \verb|Serialize_r_expr| is also simpler, because some types cannot exist inside a language expression (e.g. complex numbers) and all the vectors have length 1.
 
 \subsection{Test generation}
 After the trace has been serialized, it is in a form from which tests can be made easily. Function \verb|get_tests| generates tests into an output directory. It creates one file per test case and one test case per trace. 
@@ -499,7 +506,7 @@ After the trace has been serialized, it is in a form from which tests can be mad
 gen_tests(output_dir = "./genthat_tests")
 \end{minted}
 
-The generated tests use package testthat, that uses syntax that is accessible and understandable even for novice users. Each test is wrapped in a \verb|test_that| function and for assertion functions with clear names like \verb|expect_identical| or \verb|expect_equal| are used.
+The generated tests use package \verb|testthat|\cite{testthat}, that uses syntax that is accessible and understandable even for novice users. Each test is wrapped in a \verb|test_that| function and for assertion functions with clear names like \verb|expect_identical| or \verb|expect_equal| are used.
 
 For example for function call \verb|add13(5L, 10L)| of function \verb|add13| from the chapter \ref{ssec:clos1} Genthat would generate the following test:
 
@@ -512,7 +519,7 @@ test_that("add13", {
 \end{minted}
 
 \chapter{Serializing arguments as expressions} \label{chap:args}
-This chapter describes work of my colleague Filippo Ghibellini on serializing arguments as expressions and because I have built all my work on top of it, it is essential to briefly describe it.
+This chapter describes work of my colleague Filippo Ghibellini on serializing arguments as expressions and because I have built my work on top of it, it is essential to briefly describe it.
 
 Genthat originally serialized only the forced values of arguments. For function call with one variable in it:
 
@@ -521,18 +528,24 @@ x <- 10
 f(x)
 \end{minted}
 
-Genthat would serialize this as \verb|f(10)|. Which from the function’s point of view is the same, if the function is referentially transparent. Referentially transparent function behaves the same if we replace its arguments by their values. \verb|f(10)| must be the same \verb|f(x)|. But referential transparency does not hold for functions that use non-standard evaluation. Example may be the \verb|hist| function. The following call takes 1000 samples from normal distribution and prints its histogram.
+Genthat would serialize this as \verb|f(10)|. From the function’s point of view this is the same, as long as the function is referentially transparent. Referentially transparent function behaves the same if we replace its arguments by their values. \verb|f(10)| must be the same \verb|f(x)|. But referential transparency does not hold for functions that use non-standard evaluation. Example may be the \verb|hist| function. The following call takes 1000 samples from normal distribution and prints its histogram as figure \ref{fig:hist1} shows.
 
 \begin{minted}{r}
 x <- rnorm(1000)
 > hist(x)
 \end{minted}
 
-\includegraphics[width=0.5\textwidth]{img/hist.png}
+\begin{figure}\centering
+    \includegraphics[width=0.7\textwidth]{img/hist.png}
+	\caption[Result of calling hist with expression x]{Result of calling hist with expression x}\label{fig:hist1}
+\end{figure}
 
-As shown above R used both the value and the expression \verb|x| to print this chart. If we would take the value of \verb|x| and substitute it directly into the \verb|hist| call, the resulting chart is the same, but title and \verb|x| axes label do not make sense.
+As shown in \ref{fig:hist1} R used both the value and the expression \verb|x| to print this chart. If we would take the value of \verb|x| and substitute it directly into the \verb|hist| call, the resulting chart is the same, but title and \verb|x| axes label do not make sense, as figure \ref{fig:hist2} shows.
 
-\includegraphics[width=0.5\textwidth]{img/hist2.png}
+\begin{figure}\centering
+    \includegraphics[width=0.7\textwidth]{img/hist2.png}
+	\caption[Result of calling hist with vector of values instead of expression x]{Result of calling hist with vector of values instead of expression x}\label{fig:hist2}
+\end{figure}
 
 This is caused by \verb|hist| being referentially opaque (opposite of referentially transparent) and although the values are the same, the expressions that created them differ and \verb|hist| accesses both the value and expression for the first argument and it prints different labels for different expressions.
 
@@ -541,7 +554,7 @@ For correct serialization of functions like this, Filippo devised, that Genthat 
 \subsection{Capturing arguments in decorated functions}
 When function is decorated, its code gets instrumented and genthat’s code is inserted before its original body and into the \verb|on.exit| handler.
 
-The code inserted in the beginning is responsible for capturing expressions arguments. First it gets the whole function call (by calling the \verb|sys.call()|) function in form of a list. First item of the list is the name of the function, subsetting the list by -1 removes it. This returns the arguments as unevaluated expressions. By serializing the \verb|call_args| variable we are able to recreate the function call later when generating tests.
+The code inserted in the beginning is responsible for capturing expressions of arguments. It first gets the whole function call (by calling the \verb|sys.call()|) function in form of a list. First item of the list is the name of the function, subsetting the list by -1 removes it. This returns the arguments as unevaluated expressions. By serializing the \verb|call_args| variable we are able to recreate the function call later when generating tests.
 
 \begin{minted}{r}
 call_args <- as.list(sys.call())[-1]
@@ -554,7 +567,7 @@ exprs <- as.character(c(lapply(call_args, all.names), recursive = TRUE))
 \end{minted}
 
 Then the symbol names are filtered, because they contain parenthesis, operators, keywords and other stuff that we do not have to serialize and are always available in R. 
-Note: This filtering is not sufficient to cover all cases where we do not have to capture the variable value. For example it does capture variables from packages, which is not necessary. An improved filtering of names is in the works as of finishing this thesis.
+Note: This filtering is not sufficient to cover all cases where we do not have to capture the variable value. For example it does capture variables from packages, which is not necessary. An improved filtering of names is development as of finishing this thesis.
 
 \begin{minted}{r}
 filter <- function(x)!(x %in% genthat:::operators || x %in% genthat:::keywords)
@@ -629,7 +642,7 @@ Genthat already supported serialization of simple language expressions, but befo
 But when we started to handle all arguments as expressions, the scope of usage has broadened and some improvements had to be done so we would be able to serialize as many language expressions as possible.
 
 \section{Structure of language expression in R} \label{sec:ast}
-``Internal representation of language expression in R is an AST (abstract syntax tree) and we can use the ast() function from pryr package to print the structure of a language expression.'' \cite{advR}
+Laguage expression in R is represented by its AST (abstract syntax tree) and we can use the ast() function from pryr package to print it \cite{advR}.
 
 \begin{minipage}{\linewidth}
 \begin{minted}{r}
@@ -649,16 +662,19 @@ But when we started to handle all arguments as expressions, the scope of usage h
 The tree consists of four possible node types: constants, names, calls and pairlists.
 
 \subsection{Constants}
-Constants are atomic vectors with length one. They are directly represented by their values, because R optimizes the AST and does not store the expressions that creates constants. The following types are represented as constants in the AST:
+Constants are atomic vectors with length one. They are directly represented by their values, because R optimizes the AST and does not store the expressions that creates constants. Types mentioned in table \ref{tab:astConstants} are represented as constants in the AST.
 
-\begin{description}
-	\item[Null value] \verb|(NILSXP)| NULL
-	\item[Logical values] \verb|(LGLSXP)| TRUE, FALSE, NA
-	\item[Integers] \verb|(INTSXP)| -1L, 5L, \ldots, \verb|NA_integer_|
-	\item[Real numbers] \verb|(REALSXP)| 1, 1.1, 5, \ldots
-	\item[Strings] \verb|(STRSXP)| - "a", "world", \ldots
-
-\end{description}
+\begin{table}[h]\centering
+	\caption[Constants in language expressions]{Constants in language expressions}\label{tab:astConstants}
+	\begin{tabular}{|l|l|l|} \hline
+        Type & SEXP type & Example values \tabularnewline \hline \hline
+        Null value & \verb|(NILSXP)| & NULL \tabularnewline \hline
+        Logical values & \verb|(LGLSXP)| & TRUE, FALSE, NA\tabularnewline \hline
+        Integers & \verb|(INTSXP)| & -1L, 5L, \ldots, \verb|NA_integer_|\tabularnewline \hline
+        Real numbers & \verb|(REALSXP)| & 1, 1.1, 5, \ldots\tabularnewline \hline
+        Strings & \verb|(STRSXP)| & "a", "world", \ldots\tabularnewline \hline
+    \end{tabular}
+\end{table}
 
 \begin{minted}{r}
 > pryr::ast(NULL)
@@ -685,7 +701,7 @@ Because constants are represented directly by their values, the quoted expressio
 \end{minted}
 
 \subsubsection{Real constants}
-When working with real numbers this means that we could lose precision when extracting numbers from the AST, the internal representation of numbers uses float arithmetic and therefore its precision is limited.
+When working with real numbers\footnote{In this thesis the numbers that would get serialized into binary form are for readability purposes presented in their textual form (e.g. 0.1)} this means that we could lose precision when extracting numbers from the AST, the internal representation of numbers uses float arithmetic and therefore its precision is limited.
 
 The first example shows number 0.1 (number that does not have terminate decimal expansion in binary base) first as entered by the user "0.1" and then how R stores it internally (imprecise after first seventeen decimal places).
 
@@ -735,7 +751,7 @@ Function calls are represented by call nodes. They start with pair of parenthesi
   \- `b
 \end{minted}
 
-\subsection{Argument names}
+\subsection{Argument names} \label{ssub:tags}
 As shown in the previous repl output, the argument name \verb|a| is missing from the ast printout. Internally argument names are attached to the argument value using the \verb|TAG| pointer \cite{specs}.
 
 \begin{minted}{r}
@@ -766,7 +782,7 @@ The \verb|MISSING| value next to \verb|x| tells us that \verb|x| does not have a
 Although the serialization of language expressions had already been implemented before writing this thesis, I made many improvements to it, so the existing implementation would adapt to the changing requirements of Genthat and generally expand the possibilities of which function calls Genthat can trace.
 
 \subsection{Support for tilde operators}
-Language expression serialization in Genthat supported just a few basic infix operators (+, -, *…). Serialization of tilde operator ({\raise.17ex\hbox{$\scriptstyle\sim$}}) used to end up with tilde being called as a function. Tilde is a special oprator in R, because forcing an expression with it, does not force its values.
+Language expression serialization in Genthat supported just a few basic infix operators (+, -, *…). Serialization of tilde operator ({\raise.17ex\hbox{$\scriptstyle\sim$}}) used to end up with tilde being called as a function. Tilde is a special operator in R, because forcing an expression with it, does not force its values. Expressions containing tilde are called formulas.
 
 \begin{minted}{r}
 #formulas – original serialization
@@ -816,7 +832,7 @@ We cannot generally say whether \verb|lm| (or any other function) would look for
 \subsection{Serialization of function declaration} \label{ssub:clos2}
 Serialization of function declaration is used when a lambda function is passed into the decorated function or when quoted language expression contains function declaration.
 
-Passing of a lambda function:
+Passing a lambda function as an argument:
 
 \begin{minted}{r}
 f(function(a, b) a + b)
@@ -881,7 +897,7 @@ The pairlist from the following AST gets serialized just as \verb|x, y|, so we c
 \subsection{Serialization of pairlists}
 Standalone pairlist has to be serialized as a string containing R expression that recreates the original pairlist object, so it could directly be assigned to a function’s formals after it is parsed and evaluated.
 
-To be able to do that, I have implemented serialization that creates a function call to \verb|alist| with the original arguments. \verb|Alist| is an abbreviation of “argument list”. It returns a list, but does not evaluate its arguments and it is also possible to omit the values that should be assigned to the names. By doing so it creates a name with a missing value (In the context of function declaration this represents a function argument with no default value). The following two expressions are identical:
+To be able to do that, I have implemented serialization that creates a function call to \verb|alist| with the original arguments. \verb|alist| is an abbreviation of “argument list”. It returns a list, but does not evaluate its arguments and it is also possible to omit the values that should be assigned to the names. By doing so it creates a name with a missing value (In the context of function declaration this represents a function argument with no default value). The following two expressions are identical:
 
 \begin{minted}{r}
 > a <- alist(a = )
@@ -927,7 +943,7 @@ That means I had to introduce another branching into the logic of \verb|LANGSXP|
 \end{minted}
 
 \subsection{Serialization of nested language expressions}
-The difference between serialization of a nested language expression and a standalone language expression is that standalone language expression must be enclosed in quote call, otherwise R would force evaluation on it after it is deserialized. But this enclosing is required only for the highest level of the expression’s ATS and not for the nested sub-expressions. 
+The difference between serialization of a nested language expressions and a standalone language expression is that a standalone language expression must be enclosed in quote call, otherwise R would force evaluation on it after it is deserialized. But this enclosing is required only for the highest level of the expression’s ATS and not for the nested sub-expressions. 
 
 Previously Genthat couldn’t serialize nested call expressions (that includes nested function declaration, nested blocks…) and because of that handled only very simple expressions like binary expressions or function calls with only names and constants inside them.
 
@@ -988,7 +1004,7 @@ case STRSXP: {
 The code above is a part of \verb|serialize_r| function in C++ and it shows that R uses integers for internal representation of logical values. For strings it calls Genthat’s internal function \verb|to_string_literal|, that handles escaping of special characters.
 
 \subsection{Serialization of named arguments in function calls}
-Previously Genthat did not read the \verb|TAG| property of the symbols inside function calls and supported only positional arguments. Serialization of a function call with named arguments used to be treated as a call with just positional arguments and that led to generating broken tests.
+Previously Genthat did not read the \verb|TAG| property of the symbols which contains the argument name (as explained in chapter \ref{ssub:tags}) and supported only positional arguments. Serialization of a function call with named arguments used to be treated as a call with just positional arguments and that led to generating broken tests.
 
 In the following example imagine that \verb|f| could have many optional arguments and the possibility that \verb|x| is the second argument is not very big. 
 
@@ -1026,7 +1042,7 @@ test_that("fx", {
 \end{minted}
 
 \chapter{Serialization of Closures} \label{chap:clos}
-Closures has been already mentioned many times, it has been shown what closures are made of, how they are created, their related environments and the chapter \ref{ssub:clos2} described how anonymous closures are serialized. Closures are serialized differently whether they are anonymous or bound to a name (named closures). 
+Closures has been already mentioned many times, it has been shown what closures are made of, how they are created, their related environments and the chapter \ref{ssub:clos2} described how anonymous closures are serialized. Closures are serialized differently whether they are anonymous or bound to a name (named closures). This is similar to serializing arguments as forced values or as language expressions.
 
 \begin{minted}{r}
 #Named closure
@@ -1060,7 +1076,7 @@ Typically, anonymous functions are used only when the computation expressed by t
 Another reason behind the distinction of how anonymous functions and named functions are serialized is to try two ways and see which would perform better on the packages from CRAN and then decide which way the closure serialization should follow.
 
 \section{Passing closures into higher order functions}
-As mentioned in the chapter \ref{chap:genthat} about the internals of genthat when decorated function is called, we do not force the evaluation of its arguments and we trace the value of expressions passed into it separately from the expressions themselves. This causes that anonymous functions and named functions are not the same from the tracing perspective. 
+As mentioned in the chapter \ref{chap:genthat} about the internals of genthat, when decorated function is called, we do not force the evaluation of its arguments and we trace the value of expressions passed into it separately from the expressions themselves. This causes that anonymous functions and named functions are not the same from the tracing perspective. 
 
 When an anonymous function is passed and evaluation is not forced, Genthat gets the language expression (\verb|LANGSXP|) of the whole function declaration, but for a named function it gets only the name of the function as a symbol (\verb|SYMSXP|). When serializing the expression, it must work with the already forced value of the function declaration (\verb|CLOSEXP|). The example below demonstrates that:
 
@@ -1100,9 +1116,10 @@ The first thing that is serialized is the enclosing environment of the closure. 
 \includegraphics[width=\textwidth]{img/func-exec.png}
 
 \subsection{Possible ways of serializing the environments}
+There are two possible ways of serializing environments that differs in the way they treat symbols, that exist in the enclosing environment, but we cannot say for sure, whether the function is going to use them. Serializing the whole hierarchy serializes them, but serializing into a simplified environment does not.
 
 \subsubsection{Serializing the whole hierarchy of environments}
-The serialization could start in the enclosing environment of function \verb|fx| and then continue recursively into the parent environment until it reaches the environment of the first package and stops there. When serializing an environment, it would serialize all the variables bound inside it and the result would be a tree of environments, that when deserialized and evaluated would recreate the original context of \verb|fx|. This process would have to check for loops and ensure each environment gets serialize only once.
+The serialization could start in the enclosing environment of function \verb|fx| and then continue recursively into the parent environment until it reaches the environment of the first package and stops there. When serializing an environment, it would serialize all the variables bound inside it and the result would be a tree of environments, that when deserialized and evaluated would recreate the original context of \verb|fx|. This process would have to check for loops and ensure each environment gets serialize only once. The advantage of this approach is that it will serialize all the symbols, that function may theoretically access, not just symbols that are referenced from its body.
 
 \subsubsection{Serializing subset of variables into a simplified environment}
 Another way is to reuse the idea used for serializing function arguments. Genthat could extract all the variables used inside the closure, look them up in the environment hierarchy and then extract them to a new environment (called simple environment) and serialize it.
@@ -1195,11 +1212,13 @@ test_that("lapply2", {
 
 \setsecnumdepth{part}
 \chapter{Conclusion}
-This thesis has described many nuances the R language has in the context of closures and expression evaluation, it explained how Genthat may improve R in the future and how it works inside. The main goal of this thesis has been to implement serialization of closures, I believe that it has been reached and although there may be some rough edges or bugs waiting to be discovered, it laid a foundation to build upon. 
+This thesis has described many nuances the R language has in the context of closures and expression evaluation, it explained how Genthat may improve existing R code and how it works inside. The main goal of this thesis has been to implement serialization of closures, I believe that it has been reached and although there may be some rough edges or bugs waiting to be discovered, it laid a foundation to build upon. 
 
 
 \section{Future work}
 As of finishing this thesis, Genthat has been undergoing a refactoring to integrate all the new features and simplify future development. After it is done, it should be possible to run it on the CRAN repository and use the result to choose in which areas should the future work take place.
+
+One of the possible improvements may be tracing changes in the enclosing environments, so Genthat could also generate tests to track side effects of functions. Or using the binary form only for numbers, that are going to be affected by the precision loss and not for all real numbers.
 
 
 \bibliographystyle{iso690}
